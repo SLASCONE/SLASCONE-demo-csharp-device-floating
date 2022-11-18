@@ -22,6 +22,11 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 
 		private ProvisioningClient _provisioningClient;
 
+		private SessionClient _sessionClient;
+
+		private readonly string _deviceId;
+		private readonly string _userName;
+
 		#endregion
 
 		#region Construction
@@ -30,6 +35,9 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		{
 			IsvId = _isvId;
 			ProvisioningKey = provisioningKey;
+
+			_deviceId = Helper.GetWindowsUniqueDeviceId();
+			_userName = "demo@slascone.com";
 		}
 
 		#endregion
@@ -60,6 +68,9 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		private ProvisioningClient ProvisioningClient
 			=> _provisioningClient ?? (_provisioningClient = new ProvisioningClient(HttpClient) { BaseUrl = BaseUrl });
 
+		private SessionClient SessionClient
+			=> _sessionClient ?? (_sessionClient = new SessionClient(HttpClient) { BaseUrl = BaseUrl });
+
 		#endregion
 
 		#region Interface
@@ -72,68 +83,35 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="signature">Signature to verify the license info</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
 		/// <returns>Http status code: 200=OK, 409=Conflict</returns>
-		public int TryAddLicenseHeartbeat(Guid productId, out LicenseInfoDto licenseInfo, out string signature, out int errorId)
+		public int TryAddLicenseHeartbeat(Guid productId, Guid heartbeatType, out LicenseInfoDto licenseInfo, out string signature, out int errorId)
 		{
-			Console.WriteLine("Trying to create a license heartbeat ...");
-
-			int status = 0;
-			errorId = 0;
-
-			try
+			if (!TryExecute<SwaggerResponse<LicenseInfoDto>, HeartbeatResponseErrors>(() => ProvisioningClient.HeartbeatsAsync(IsvId, new AddHeartbeatDto()
+			    {
+				    Product_id = productId,
+				    Client_id = _deviceId,
+				    Operating_system = Helper.GetWindowsOperatingSystem(),
+				    Software_version = "22",
+					Heartbeat_type_id = heartbeatType
+			    }).Result, out var swaggerResponse, out var status, out errorId))
 			{
-				var response = ProvisioningClient.HeartbeatsAsync(IsvId, new AddHeartbeatDto()
-				{
-					Product_id = productId,
-					Client_id = Helper.GetWindowsUniqueDeviceId(),
-					Operating_system = Helper.GetWindowsOperatingSystem(),
-					Software_version = "22"
-				}).Result;
-
-				if (HttpStatusCode.OK != (HttpStatusCode)response.StatusCode)
-				{
-					licenseInfo = null;
-					signature = null;
-					return (int)response.StatusCode;
-				}
-
-				if (response.Headers.TryGetValue("x-slascone-signature", out var headers)
-					&& null != headers)
-				{
-					signature = headers.First();
-				}
-				else
-				{
-					signature = null;
-				}
-
-				if (null != response.Result)
-				{
-					licenseInfo = response.Result;
-					return (int)response.StatusCode;
-				}
-			}
-			catch (AggregateException aggregateException)
-			{
-				if (aggregateException.InnerException is ApiException<HeartbeatResponseErrors> apiException)
-				{
-					errorId = apiException.Result.Id;
-					status = apiException.StatusCode;
-				}
-				else if (aggregateException.InnerException is HttpRequestException httpException)
-				{
-					Console.WriteLine(httpException);
-					status = (int)(httpException.StatusCode ?? HttpStatusCode.BadRequest);
-				}
-			}
-			catch (Exception exception)
-			{
-				Console.WriteLine(exception);
-				status = (int)HttpStatusCode.BadRequest;
+				licenseInfo = null;
+				signature = null;
+				return status;
 			}
 
-			licenseInfo = null;
-			signature = null;
-			return status;
+			if (swaggerResponse.Headers.TryGetValue("x-slascone-signature", out var headers)
+			    && null != headers)
+			{
+				signature = headers.First();
+			}
+			else
+			{
+				signature = null;
+			}
+
+			licenseInfo = swaggerResponse.Result;
+
+			return (int)swaggerResponse.StatusCode;
 		}
 
 		/// <summary>
@@ -147,70 +125,167 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <returns></returns>
 		public int TryActivateLicense(Guid productId, string licenseKey, out LicenseInfoDto licenseInfo, out string signature, out int errorId)
 		{
-			Console.WriteLine("Trying to activate the license ...");
+			if (!TryExecute<SwaggerResponse<LicenseInfoDto>, ActivateLicenseResponseErrors>(() => ProvisioningClient.ActivationsAsync(IsvId, new ActivateClientDto
+			    {
+				    Product_id = productId,
+				    License_key = licenseKey,
+				    Client_id = _deviceId,
+				    Client_description = "SLASCONE-demo-csharp-swagger",
+				    Client_name = "SLASCONE demo app",
+				    Software_version = "22"
+			    }).Result, out var swaggerResponse, out var status, out errorId))
+			{
+				licenseInfo = null;
+				signature = null;
+				return status;
+			}
 
-			int status = 0;
-			errorId = 0;
+			if (swaggerResponse.Headers.TryGetValue("x-slascone-signature", out var headers)
+			    && null != headers)
+			{
+				signature = headers.First();
+			}
+			else
+			{
+				signature = null;
+			}
 
+			licenseInfo = swaggerResponse.Result;
+
+			return (int)swaggerResponse.StatusCode;
+		}
+
+		/// <summary>
+		/// Try to open a new session
+		/// </summary>
+		/// <param name="licenseId">License Id for which a new session should be opened</param>
+		/// <param name="sessionId">Id of the new session if successfully opened</param>
+		/// <param name="errorId">Slascone error id in case of an error</param>
+		/// <returns></returns>
+		public bool TryOpenSession(Guid licenseId, out Guid sessionId, out int errorId)
+		{
+			var newSessionId = sessionId = Guid.NewGuid();
+
+			if (!(TryExecute<SessionStatusDto, OpenSessionErrors>(() => SessionClient.OpenAsync(IsvId, new SessionRequestDto
+			      {
+				      Client_id = _deviceId,
+				      License_id = licenseId,
+				      Session_id = newSessionId,
+				      User_id = _userName,
+				      Checkout_period = 5.0 // minutes
+			      }).Result, out var sessionStatus, out _, out errorId) 
+			      && (sessionStatus?.Is_session_valid ?? false)))
+			{
+				sessionId = Guid.Empty;
+				return false;
+			}
+
+			return true;
+		}
+
+		/// <summary>
+		/// Try to renew an open session
+		/// </summary>
+		/// <param name="licenseId">License Id th which the session belongs</param>
+		/// <param name="sessionId">Id of the session that should be renewed</param>
+		/// <param name="errorId">Slascone error id in case of an error</param>
+		/// <returns></returns>
+		public bool TryRenewSession(Guid licenseId, Guid sessionId, out int errorId)
+		{
+			return TryExecute<SessionStatusDto, OpenSessionErrors>(() => SessionClient.OpenAsync(IsvId, new SessionRequestDto
+			       {
+				       Client_id = _deviceId,
+				       License_id = licenseId,
+				       Session_id = sessionId,
+				       User_id = _userName,
+				       Checkout_period = 5.0 // minutes
+			       }).Result, out var sessionStatus, out _, out errorId)
+			       && (sessionStatus?.Is_session_valid ?? false);
+		}
+
+		/// <summary>
+		/// Try to close a session
+		/// </summary>
+		/// <param name="licenseId">License Id th which the session belongs</param>
+		/// <param name="sessionId">Id of the session that should be closed</param>
+		/// <param name="result">Result of the operation</param>
+		/// <param name="errorId">Slascone error id in case of an error</param>
+		/// <returns></returns>
+		public bool TryCloseSession(Guid licenseId, Guid sessionId, out string? result, out int errorId)
+		{
+			return TryExecute<string, CloseSessionErrors>(() => SessionClient.CloseAsync(IsvId, new SessionRequestDto
+			{
+				Client_id = _deviceId,
+				License_id = licenseId,
+				Session_id = sessionId,
+				User_id = _userName
+			}).Result, out result, out _, out errorId);
+		}
+
+		#endregion
+
+		#region Implementation
+
+		/// <summary>
+		/// Execute an operation with standard exception handling
+		/// </summary>
+		/// <typeparam name="T">Type of the result of the operation</typeparam>
+		/// <typeparam name="TResult">Type of the exception that can possibly been thrown</typeparam>
+		/// <param name="f">Operation to execute</param>
+		/// <param name="result">Result of the operation if successfully executed</param>
+		/// <param name="status">Status code of the execution (Http status)</param>
+		/// <param name="errorId">Slascone error id in case of an error</param>
+		/// <returns></returns>
+		private bool TryExecute<T, TResult>(Func<T> f, out T? result, out int status, out int errorId)
+			where T : class?
+			where TResult : BaseErrorResponse
+		{
 			try
 			{
-				var response = ProvisioningClient.ActivationsAsync(IsvId, new ActivateClientDto
-				{
-					Product_id = productId,
-					License_key = licenseKey,
-					Client_id = Helper.GetWindowsUniqueDeviceId(),
-					Client_description = "SLASCONE-demo-csharp-swagger",
-					Client_name = "SLASCONE demo app",
-					Software_version = "22"
-				}).Result;
+				result = f();
 
-				if (HttpStatusCode.OK != (HttpStatusCode)response.StatusCode)
-				{
-					licenseInfo = null;
-					signature = null;
-					errorId = 0;
-					return (int)response.StatusCode;
-				}
-
-				if (response.Headers.TryGetValue("x-slascone-signature", out var headers)
-					&& null != headers)
-				{
-					signature = headers.First();
-				}
-				else
-				{
-					signature = null;
-				}
-
-				if (null != response.Result)
-				{
-					licenseInfo = response.Result;
-					errorId = 0;
-					return (int)response.StatusCode;
-				}
+				status = (int)HttpStatusCode.OK;
+				errorId = 0;
+				return true;
 			}
 			catch (AggregateException aggregateException)
 			{
-				if (aggregateException.InnerException is ApiException<HeartbeatResponseErrors> apiException)
+				switch (aggregateException.InnerException)
 				{
-					errorId = apiException.Result.Id;
-					status = apiException.StatusCode;
+					case ApiException<TResult> apiException:
+						Console.WriteLine(@$"Slascone error {apiException.Result.Id}: ""{apiException.Result.Message}""");
+						status = apiException.StatusCode;
+						errorId = apiException.Result.Id;
+						break;
+					case ApiException commonApiException:
+						Console.WriteLine($"Slascone error {commonApiException.Response}");
+						status = commonApiException.StatusCode;
+						errorId = 0;
+						break;
+					case HttpRequestException httpException:
+						Console.WriteLine(httpException);
+						status = (int)httpException.StatusCode;
+						errorId = 0;
+						break;
+					default:
+						Console.WriteLine(aggregateException.InnerException);
+						status = (int)HttpStatusCode.BadRequest;
+						errorId = 0;
+						break;
 				}
-				else if (aggregateException.InnerException is HttpRequestException httpException)
-				{
-					Console.WriteLine(httpException);
-					status = (int)(httpException.StatusCode ?? HttpStatusCode.BadRequest);
-				}
+
+				result = default;
+				return false;
 			}
 			catch (Exception e)
 			{
 				Console.WriteLine(e);
-				status = (int)HttpStatusCode.BadRequest;
-			}
 
-			licenseInfo = null;
-			signature = null;
-			return status;
+				result = default;
+				status = (int)HttpStatusCode.BadRequest;
+				errorId = 0;
+				return false;
+			}
 		}
 
 		#endregion
