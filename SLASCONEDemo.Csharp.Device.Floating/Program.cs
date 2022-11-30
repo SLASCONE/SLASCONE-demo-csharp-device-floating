@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography;
-using SLASCONEDemo.Csharp.Device.Floating;
+﻿using SLASCONEDemo.Csharp.Device.Floating;
 using SlasconeClient;
 
 Guid _productId = new Guid("b18657cc-1f7c-43fa-e3a4-08da6fa41ad3");
@@ -43,9 +42,7 @@ else
 {
 	// 2c. Offline or not licensed mode if heartbeat creation and/or license activation not successful:
 	//     Use old license infos from a previous license check
-	// TODO: Retrieve license info and signature from local files
-	// TODO: Validate license info with signature
-	// TODO: Handle license info as shown in method Success()
+	Offline();
 	return;
 }
 
@@ -53,6 +50,9 @@ else
 // Trying to exceed the session limit
 // (you would not do this in a real life scenario)
 //
+
+Console.WriteLine();
+Console.WriteLine("Trying to exceed the session limit");
 
 var openSessionIds = new List<Guid>();
 
@@ -69,12 +69,23 @@ foreach (var openSessionId in openSessionIds)
 	CloseSession(licenseInfo.License_key, openSessionId);
 }
 
+//
+// Test offline license just to see if it works
+//
+
+Console.WriteLine();
+Console.WriteLine("Test offline license");
+
+Offline();
+
 #region Methods / functions
 
 // License check procedure
 // 1. Try to create a license heartbeat
 // 2a. License heartbeat successfully created: Store license info and signature
 // 2b. If not successfully created with status code 409 and error 2006 (Unknown client): Try to activate the license
+// 3. Open a session
+// 
 bool CheckLicense(out LicenseInfoDto licenseInfo)
 {
 	// 1. Try to create a license heartbeat
@@ -87,7 +98,10 @@ bool CheckLicense(out LicenseInfoDto licenseInfo)
 		case 200:
 			// License heartbeat successfully created
 			Console.WriteLine("Successful created license heartbeat.");
-			Success(licenseInfo, signature);
+			UseLicense(licenseInfo);
+
+			// Store license info and signature locally in files to use it in an offline situation
+			Helper.StoreLicenseAndSignature(slasconeService.RawLicenseInfoDto, slasconeService.LicenseInfoSignature);
 
 			break;
 
@@ -106,7 +120,10 @@ bool CheckLicense(out LicenseInfoDto licenseInfo)
 					Console.WriteLine(@"Slascone error ""Unknown client.""");
 					if (HandleUnknownClientError(out licenseInfo, out signature))
 					{
-						Success(licenseInfo, signature);
+						UseLicense(licenseInfo);
+
+						// Store license info and signature locally in files to use it in an offline situation
+						Helper.StoreLicenseAndSignature(slasconeService.RawLicenseInfoDto, slasconeService.LicenseInfoSignature);
 
 						// Optional: Send a license heartbeat immediately after activation
 						status = slasconeService.TryAddLicenseHeartbeat(_productId, _programStartHeartbeat, out licenseInfo,
@@ -141,17 +158,28 @@ bool CheckLicense(out LicenseInfoDto licenseInfo)
 
 //-------------------------------------------------------------------------------
 // 2a. License heartbeat successfully created: Store license info and signature
-void Success(LicenseInfoDto licenseInfo, string signature)
+void UseLicense(LicenseInfoDto licenseInfo)
 {
 	Console.WriteLine("License infos:");
 	Console.WriteLine($"   Company name: {licenseInfo.Customer.Company_name}");
-
-	// TODO: Store license info and signature locally in files to use it in an offline situation
-
+	
 	// Handle license info
 	//  o Active and expired state (i.e. valid state)
 	//  o Active features and limitations
 	Console.WriteLine($"   License is {(licenseInfo.Is_license_valid ? "valid" : "not valid")} (IsActive: {licenseInfo.Is_license_active}; IsExpired: {licenseInfo.Is_license_expired})");
+
+	if (licenseInfo.Is_license_expired)
+	{
+		var expiration = (DateTime.Now - licenseInfo.Expiration_date_utc.Value).Days;
+		Console.WriteLine($"   License is expired since {expiration} day(s).");
+
+		// Check freeride
+		if (licenseInfo.Freeride.HasValue && expiration < licenseInfo.Freeride.Value)
+		{
+			Console.WriteLine($"   Freeride granted for {licenseInfo.Freeride.Value - expiration} day(s).");
+		}
+	}
+
 	Console.WriteLine($"   Active features: {string.Join(", ", licenseInfo.Features.Where(f => f.Is_active).Select(f => f.Name))}");
 	Console.WriteLine($"   Limitations: {string.Join(", ", licenseInfo.Limitations.Select(l => $"{l.Name} = {l.Value}"))}");
 }
@@ -288,6 +316,35 @@ void CloseSession(string licenseKey, Guid sessionId)
 	}
 
 	Console.WriteLine(@$"Session {sessionId} successfully closed. ""{result}""");
+}
+
+// Offline mode
+// Read and check a license that was stored at the last successful communication
+void Offline()
+{
+	// Read the stored license and check the signature
+	var signatureValid = Helper.GetOfflineLicense(out licenseInfo);
+	if (!signatureValid)
+	{
+		// If the signature is not valid someone could have manipulated the stored license
+		Console.WriteLine("Signature of offline license not valid!");
+		return;
+	}
+
+	// Since the license was stored eventually a couple of days ago the license might be expired
+	var expiration = (DateTime.Now - licenseInfo.Expiration_date_utc.Value).Days;
+	licenseInfo.Is_license_expired = 0 < expiration;
+	licenseInfo.Is_license_valid = licenseInfo.Is_license_active && !licenseInfo.Is_license_expired;
+
+	if (!licenseInfo.Is_license_expired
+	    || (licenseInfo.Freeride.HasValue && expiration < licenseInfo.Freeride.Value))
+	{
+		UseLicense(licenseInfo);
+	}
+	else
+	{
+		Console.WriteLine("License is expired.");
+	}
 }
 
 #endregion

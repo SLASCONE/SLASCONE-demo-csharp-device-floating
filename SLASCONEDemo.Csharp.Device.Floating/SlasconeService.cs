@@ -1,6 +1,6 @@
 ﻿using SlasconeClient;
 using System.Net;
-using System.Net.Mail;
+using System.Net.Http.Headers;
 
 namespace SLASCONEDemo.Csharp.Device.Floating
 {
@@ -9,8 +9,10 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		#region Const
 
 		private const string BaseUrl = "https://api.slascone.com";
+
+		// TODO: Exchange the value of the variables to your specific tenant.
 		private readonly Guid _isvId = new Guid("2af5fe02-6207-4214-946e-b00ac5309f53");
-		private const string provisioningKey = "NfEpJ2DFfgczdYqOjvmlgP2O/4VlqmRHXNE9xDXbqZcOwXTbH3TFeBAKKbEzga7D7ashHxFtZOR142LYgKWdNocibDgN75/P58YNvUZafLdaie7eGwI/2gX/XuDPtqDW";
+		private const string _provisioningKey = "NfEpJ2DFfgczdYqOjvmlgP2O/4VlqmRHXNE9xDXbqZcOwXTbH3TFeBAKKbEzga7D7ashHxFtZOR142LYgKWdNocibDgN75/P58YNvUZafLdaie7eGwI/2gX/XuDPtqDW";
 
 		#endregion
 
@@ -18,13 +20,14 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 
 		private HttpClient _httpClient;
 
-		private LicensesClient _licensesClient;
+		private LicensesClient? _licensesClient;
 
-		private ProvisioningClient _provisioningClient;
+		private ProvisioningClient? _provisioningClient;
 
-		private SessionClient _sessionClient;
+		private SessionClient? _sessionClient;
 
 		private readonly string _deviceId;
+
 		private readonly string _userName;
 
 		#endregion
@@ -34,7 +37,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		public SlasconeService()
 		{
 			IsvId = _isvId;
-			ProvisioningKey = provisioningKey;
+			ProvisioningKey = _provisioningKey;
 
 			_deviceId = Helper.GetWindowsUniqueDeviceId();
 			_userName = "demo@slascone.com";
@@ -55,6 +58,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 				if (null == _httpClient)
 				{
 					_httpClient = new HttpClient();
+					_httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 					_httpClient.DefaultRequestHeaders.Add("ProvisioningKey", ProvisioningKey);
 				}
 
@@ -63,17 +67,27 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		}
 
 		private LicensesClient LicensesClient
-			=> _licensesClient ?? (_licensesClient = new LicensesClient(HttpClient) { BaseUrl = BaseUrl });
+			=> _licensesClient ??= new LicensesClient(HttpClient) { BaseUrl = BaseUrl };
 
 		private ProvisioningClient ProvisioningClient
-			=> _provisioningClient ?? (_provisioningClient = new ProvisioningClient(HttpClient) { BaseUrl = BaseUrl });
+			=> _provisioningClient ??= new ProvisioningClient(HttpClient) { BaseUrl = BaseUrl };
 
 		private SessionClient SessionClient
-			=> _sessionClient ?? (_sessionClient = new SessionClient(HttpClient) { BaseUrl = BaseUrl });
+			=> _sessionClient ??= new SessionClient(HttpClient) { BaseUrl = BaseUrl };
 
 		#endregion
 
 		#region Interface
+
+		/// <summary>
+		/// Raw License info as received in the Http response. Needed for signature validation
+		/// </summary>
+		public string RawLicenseInfoDto { get; private set; }
+
+		/// <summary>
+		/// Signature for the raw License info
+		/// </summary>
+		public string LicenseInfoSignature { get; private set; }
 
 		/// <summary>
 		/// Try to add a license heartbeat
@@ -99,14 +113,16 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 				return status;
 			}
 
+			RawLicenseInfoDto = ProvisioningClient.LastReceivedResponseBody;
+
 			if (swaggerResponse.Headers.TryGetValue("x-slascone-signature", out var headers)
 			    && null != headers)
 			{
-				signature = headers.First();
+				signature = LicenseInfoSignature = headers.First();
 			}
 			else
 			{
-				signature = null;
+				signature = LicenseInfoSignature = null;
 			}
 
 			licenseInfo = swaggerResponse.Result;
@@ -122,7 +138,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="licenseInfo">License info</param>
 		/// <param name="signature">Signature to verify the license info</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
-		/// <returns></returns>
+		/// <returns>Http status code: 200=OK</returns>
 		public int TryActivateLicense(Guid productId, string licenseKey, out LicenseInfoDto licenseInfo, out string signature, out int errorId)
 		{
 			if (!TryExecute<SwaggerResponse<LicenseInfoDto>, ActivateLicenseResponseErrors>(() => ProvisioningClient.ActivationsAsync(IsvId, new ActivateClientDto
@@ -139,6 +155,8 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 				signature = null;
 				return status;
 			}
+
+			RawLicenseInfoDto = ProvisioningClient.LastReceivedResponseBody;
 
 			if (swaggerResponse.Headers.TryGetValue("x-slascone-signature", out var headers)
 			    && null != headers)
@@ -161,7 +179,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="licenseId">License Id for which a new session should be opened</param>
 		/// <param name="sessionId">Id of the new session if successfully opened</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
-		/// <returns></returns>
+		/// <returns>Sssion successfully opened</returns>
 		public bool TryOpenSession(Guid licenseId, out Guid sessionId, out int errorId)
 		{
 			var newSessionId = sessionId = Guid.NewGuid();
@@ -189,7 +207,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="licenseId">License Id th which the session belongs</param>
 		/// <param name="sessionId">Id of the session that should be renewed</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
-		/// <returns></returns>
+		/// <returns>Session sucessfully renewed</returns>
 		public bool TryRenewSession(Guid licenseId, Guid sessionId, out int errorId)
 		{
 			return TryExecute<SessionStatusDto, OpenSessionErrors>(() => SessionClient.OpenAsync(IsvId, new SessionRequestDto
@@ -210,7 +228,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="sessionId">Id of the session that should be closed</param>
 		/// <param name="result">Result of the operation</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
-		/// <returns></returns>
+		/// <returns>Session successfully closed</returns>
 		public bool TryCloseSession(Guid licenseId, Guid sessionId, out string? result, out int errorId)
 		{
 			return TryExecute<string, CloseSessionErrors>(() => SessionClient.CloseAsync(IsvId, new SessionRequestDto
