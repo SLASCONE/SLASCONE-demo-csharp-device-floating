@@ -84,8 +84,6 @@ Offline();
 // 1. Try to create a license heartbeat
 // 2a. License heartbeat successfully created: Store license info and signature
 // 2b. If not successfully created with status code 409 and error 2006 (Unknown client): Try to activate the license
-// 3. Open a session
-// 
 bool CheckLicense(out LicenseInfoDto licenseInfo)
 {
 	// 1. Try to create a license heartbeat
