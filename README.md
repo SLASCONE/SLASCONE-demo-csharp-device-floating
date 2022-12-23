@@ -68,7 +68,10 @@ to generate the client.
 
 - Namespace: `SlasconeClient`
 - Operation Generation Mode: _MultipleClientsForPathSegments_
-- [x] Generate PrepareRequest and ProcessResponse as asynchronous methods  
+- Activate the setting "_Generate PrepareRequest and ProcessResponse as asynchronous methods_"  
 This setting is necessary to get access to the body of the Http response. In order for the comparison with the signature to work, the exact byte image of the server response is required.
 - Response Wrapping  
+With some methods, the error number of the Slascone server is required in order to be able to recognize certain situations.
+These methods are enumerated so that the result is wrapped in a SwaggerResponse that provides the error number of the Slascone server.
+For more information on this topic, see the article about "[Error codes](https://support.slascone.com/hc/en-us/articles/360016160398-ERROR-CODES)"  
 ![Response Wrapping](./images/responsewrapping.png)
