@@ -30,7 +30,7 @@ if (CheckLicense(out var licenseInfo))
 		CloseSession(licenseInfo.License_key, sessionId);
 
 		// Optional: Send a program exit heartbeat
-		slasconeService.TryAddLicenseHeartbeat(_productId, _programExitHeartbeat, out _, out _, out _);
+		slasconeService.TryAddLicenseHeartbeat(_productId, _programExitHeartbeat, out _, out _);
 	}
 	else if (1007 == errorId)
 	{
@@ -89,7 +89,7 @@ bool CheckLicense(out LicenseInfoDto licenseInfo)
 	// 1. Try to create a license heartbeat
 	Console.WriteLine("Trying to create a license heartbeat ...");
 
-	var status = slasconeService.TryAddLicenseHeartbeat(_productId, _programStartHeartbeat, out licenseInfo, out var signature, out var errorId);
+	var status = slasconeService.TryAddLicenseHeartbeat(_productId, _programStartHeartbeat, out licenseInfo, out var errorId);
 
 	switch (status)
 	{
@@ -116,7 +116,7 @@ bool CheckLicense(out LicenseInfoDto licenseInfo)
 					break;
 				case 2006:
 					Console.WriteLine(@"Slascone error ""Unknown client.""");
-					if (HandleUnknownClientError(out licenseInfo, out signature))
+					if (HandleUnknownClientError(out licenseInfo))
 					{
 						UseLicense(licenseInfo);
 
@@ -124,8 +124,7 @@ bool CheckLicense(out LicenseInfoDto licenseInfo)
 						Helper.StoreLicenseAndSignature(slasconeService.RawLicenseInfoDto, slasconeService.LicenseInfoSignature);
 
 						// Optional: Send a license heartbeat immediately after activation
-						status = slasconeService.TryAddLicenseHeartbeat(_productId, _programStartHeartbeat, out licenseInfo,
-							out signature, out errorId);
+						status = slasconeService.TryAddLicenseHeartbeat(_productId, _programStartHeartbeat, out licenseInfo, out errorId);
 					}
 					break;
 				case 3000:
@@ -170,12 +169,6 @@ void UseLicense(LicenseInfoDto licenseInfo)
 	{
 		var expiration = (DateTime.Now - licenseInfo.Expiration_date_utc.Value).Days;
 		Console.WriteLine($"   License is expired since {expiration} day(s).");
-
-		// Check freeride
-		if (licenseInfo.Freeride.HasValue && expiration < licenseInfo.Freeride.Value)
-		{
-			Console.WriteLine($"   Freeride granted for {licenseInfo.Freeride.Value - expiration} day(s).");
-		}
 	}
 
 	Console.WriteLine($"   Active features: {string.Join(", ", licenseInfo.Features.Where(f => f.Is_active).Select(f => f.Name))}");
@@ -184,11 +177,11 @@ void UseLicense(LicenseInfoDto licenseInfo)
 
 //-------------------------------------------------------------------------------
 // 2b. If not successfully created with status code 409 and error 2006 (Unknown client): Activate the license
-bool HandleUnknownClientError(out LicenseInfoDto licenseInfo, out string signature)
+bool HandleUnknownClientError(out LicenseInfoDto licenseInfo)
 {
 	Console.WriteLine("Trying to activate the license ...");
 
-	var status = slasconeService.TryActivateLicense(_productId, _licenseKey, out licenseInfo, out signature, out var errorId);
+	var status = slasconeService.TryActivateLicense(_productId, _licenseKey, out licenseInfo, out var errorId);
 
 	switch (status)
 	{
@@ -329,20 +322,47 @@ void Offline()
 		return;
 	}
 
-	// Since the license was stored eventually a couple of days ago the license might be expired
-	var expiration = (DateTime.Now - licenseInfo.Expiration_date_utc.Value).Days;
-	licenseInfo.Is_license_expired = 0 < expiration;
-	licenseInfo.Is_license_valid = licenseInfo.Is_license_active && !licenseInfo.Is_license_expired;
-
-	if (!licenseInfo.Is_license_expired
-	    || (licenseInfo.Freeride.HasValue && expiration < licenseInfo.Freeride.Value))
+	if (!licenseInfo.Freeride.HasValue)
 	{
+		Console.WriteLine("No freeride period configured.");
 		UseLicense(licenseInfo);
+		return;
+	}
+
+	if (!licenseInfo.Created_date_utc.HasValue)
+	{
+		Console.WriteLine("Can't retrieve age of stored license info.");
+		return;
+	}
+
+	var age = (DateTime.Now - licenseInfo.Created_date_utc.Value).Days;
+
+	if (age <= licenseInfo.Freeride)
+	{
+		// Within freeride period!
+
+		// Check expiration date separately
+		if (licenseInfo.Expiration_date_utc.HasValue)
+		{
+			licenseInfo.Is_license_expired = licenseInfo.Expiration_date_utc < DateTime.Now;
+			licenseInfo.Is_license_valid = licenseInfo.Is_license_active && !licenseInfo.Is_license_expired;
+
+			if (licenseInfo.Is_license_expired)
+			{
+				Console.WriteLine("License is expired.");
+				return;
+			}
+		}
+
+		Console.WriteLine("License granted within the freeride period.");
 	}
 	else
 	{
-		Console.WriteLine("License is expired.");
+		Console.WriteLine("Freeride period has expired.");
+		return;
 	}
+
+	UseLicense(licenseInfo);
 }
 
 #endregion

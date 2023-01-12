@@ -67,13 +67,13 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		}
 
 		private LicensesClient LicensesClient
-			=> _licensesClient ??= new LicensesClient(HttpClient) { BaseUrl = BaseUrl };
+			=> _licensesClient ??= new LicensesClient(BaseUrl, HttpClient);
 
 		private ProvisioningClient ProvisioningClient
-			=> _provisioningClient ??= new ProvisioningClient(HttpClient) { BaseUrl = BaseUrl };
+			=> _provisioningClient ??= new ProvisioningClient(BaseUrl, HttpClient);
 
 		private SessionClient SessionClient
-			=> _sessionClient ??= new SessionClient(HttpClient) { BaseUrl = BaseUrl };
+			=> _sessionClient ??= new SessionClient(BaseUrl, HttpClient);
 
 		#endregion
 
@@ -93,11 +93,12 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// Try to add a license heartbeat
 		/// </summary>
 		/// <param name="productId">Product Id of the licensed product</param>
+		/// <param name="heartbeatType"></param>
 		/// <param name="licenseInfo">License info</param>
-		/// <param name="signature">Signature to verify the license info</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
 		/// <returns>Http status code: 200=OK, 409=Conflict</returns>
-		public int TryAddLicenseHeartbeat(Guid productId, Guid heartbeatType, out LicenseInfoDto licenseInfo, out string signature, out int errorId)
+		public int TryAddLicenseHeartbeat(Guid productId, Guid heartbeatType, out LicenseInfoDto licenseInfo,
+			out int errorId)
 		{
 			if (!TryExecute<SwaggerResponse<LicenseInfoDto>, HeartbeatResponseErrors>(() => ProvisioningClient.HeartbeatsAsync(IsvId, new AddHeartbeatDto()
 			    {
@@ -109,7 +110,8 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 			    }).Result, out var swaggerResponse, out var status, out errorId))
 			{
 				licenseInfo = null;
-				signature = null;
+				RawLicenseInfoDto = null;
+				LicenseInfoSignature = null;
 				return status;
 			}
 
@@ -118,11 +120,11 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 			if (swaggerResponse.Headers.TryGetValue("x-slascone-signature", out var headers)
 			    && null != headers)
 			{
-				signature = LicenseInfoSignature = headers.First();
+				LicenseInfoSignature = headers.First();
 			}
 			else
 			{
-				signature = LicenseInfoSignature = null;
+				LicenseInfoSignature = null;
 			}
 
 			licenseInfo = swaggerResponse.Result;
@@ -136,10 +138,10 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="productId">Product Id of the licensed product</param>
 		/// <param name="licenseKey">License to activate</param>
 		/// <param name="licenseInfo">License info</param>
-		/// <param name="signature">Signature to verify the license info</param>
 		/// <param name="errorId">Slascone error id in case of an error</param>
 		/// <returns>Http status code: 200=OK</returns>
-		public int TryActivateLicense(Guid productId, string licenseKey, out LicenseInfoDto licenseInfo, out string signature, out int errorId)
+		public int TryActivateLicense(Guid productId, string licenseKey, out LicenseInfoDto licenseInfo,
+			out int errorId)
 		{
 			if (!TryExecute<SwaggerResponse<LicenseInfoDto>, ActivateLicenseResponseErrors>(() => ProvisioningClient.ActivationsAsync(IsvId, new ActivateClientDto
 			    {
@@ -152,7 +154,8 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 			    }).Result, out var swaggerResponse, out var status, out errorId))
 			{
 				licenseInfo = null;
-				signature = null;
+				RawLicenseInfoDto = null;
+				LicenseInfoSignature = null;
 				return status;
 			}
 
@@ -161,11 +164,11 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 			if (swaggerResponse.Headers.TryGetValue("x-slascone-signature", out var headers)
 			    && null != headers)
 			{
-				signature = headers.First();
+				LicenseInfoSignature = headers.First();
 			}
 			else
 			{
-				signature = null;
+				LicenseInfoSignature = null;
 			}
 
 			licenseInfo = swaggerResponse.Result;
