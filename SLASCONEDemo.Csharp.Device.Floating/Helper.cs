@@ -1,7 +1,6 @@
 ﻿using SlasconeClient;
 using System.Management;
 using Newtonsoft.Json;
-using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
 using System;
 using System.Text;
@@ -12,9 +11,18 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 	{
 		#region Const
 
-		private const string certificateFile = @"..\..\..\Assets\signature_pub_key.pfx";
 		private const string licenseFile = @"..\..\..\Assets\license.json";
 		private const string signatureFile = @"..\..\..\Assets\signature.txt";
+		private const string signaturePubKeyPem =
+@"-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwpigzm+cZIyw6x253YRD
+mroGQyo0rO9qpOdbNAkE/FMSX+At5CQT/Cyr0eZTo2h+MO5gn5a6dwg2SYB/K1Yt
+yuiKqnaEUfoPnG51KLrj8hi9LoZyIenfsQnxPz+r8XGCUPeS9MhBEVvT4ba0x9Ew
+R+krU87VqfI3KNpFQVdLPaZxN4STTEZaet7nReeNtnnZFYaUt5XeNPB0b0rGfrps
+y7drmZz81dlWoRcLrBRpkf6XrOTX4yFxe/3HJ8mpukuvdweUBFoQ0xOHmG9pNQ31
+AHGtgLYGjbKcW4xYmpDGl0txfcipAr1zMj7X3oCO9lHcFRnXdzx+TTeJYxQX2XVb
+hQIDAQAB
+-----END PUBLIC KEY-----";
 
 		#endregion
 
@@ -58,14 +66,11 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="signature">Signature (from the http response header "x-slascone-signature")</param>
 		/// <param name="certFile"></param>
 		/// <returns></returns>
-		public static bool Validate(string content, string signature, string certFile)
+		public static bool Validate(string content, string signature, string pubKeyPem)
 		{
-			using (var signatureKeyCert = new X509Certificate2(certFile))
-			using (RSA rsa = signatureKeyCert.GetRSAPublicKey())
+			using (RSA rsa = RSA.Create())
 			{
-				Console.WriteLine($"Verifying with signature '{signatureKeyCert.Subject}'");
-				Console.WriteLine($"   Serial: {signatureKeyCert.SerialNumber}");
-				Console.WriteLine($"   Thumbprint: {signatureKeyCert.Thumbprint}");
+				rsa.ImportFromPem(pubKeyPem);
 
 				var signatureValue = Convert.FromBase64String(signature);
 				var valid = rsa.VerifyData(Encoding.UTF8.GetBytes(content), signatureValue, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -82,7 +87,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 		/// <param name="signature">Signature (from the Http response header "x-slascone-signature")</param>
 		public static void StoreLicenseAndSignature(string rawLicenseInfo, string signature)
 		{
-			if (!Validate(rawLicenseInfo, signature, certificateFile))
+			if (!Validate(rawLicenseInfo, signature, signaturePubKeyPem))
 				return;
 
 			using (StreamWriter writer = new StreamWriter(licenseFile))
@@ -107,7 +112,7 @@ namespace SLASCONEDemo.Csharp.Device.Floating
 			using (StreamReader reader = new StreamReader(signatureFile))
 				signature = reader.ReadToEnd();
 
-			var valid = Validate(rawLicenseInfo, signature, certificateFile);
+			var valid = Validate(rawLicenseInfo, signature, signaturePubKeyPem);
 
 			licenseInfo = JsonConvert.DeserializeObject<LicenseInfoDto>(rawLicenseInfo);
 

@@ -7261,7 +7261,7 @@ namespace SlasconeClient
 		/// </remarks>
 		/// <returns>Success</returns>
 		/// <exception cref="ApiException">A server side error occurred.</exception>
-		public virtual System.Threading.Tasks.Task<System.Collections.Generic.ICollection<ConsumptionDto>> RollbackAsync(System.Guid isv_id, RollbackDto rollbackDto)
+		public virtual System.Threading.Tasks.Task<System.Collections.Generic.ICollection<ConsumptionDto>> RollbackAsync(System.Guid isv_id, ConsumptionTransactionDto rollbackDto)
 		{
 			return RollbackAsync(isv_id, rollbackDto, System.Threading.CancellationToken.None);
 		}
@@ -7275,7 +7275,7 @@ namespace SlasconeClient
 		/// </remarks>
 		/// <returns>Success</returns>
 		/// <exception cref="ApiException">A server side error occurred.</exception>
-		public virtual async System.Threading.Tasks.Task<System.Collections.Generic.ICollection<ConsumptionDto>> RollbackAsync(System.Guid isv_id, RollbackDto rollbackDto, System.Threading.CancellationToken cancellationToken)
+		public virtual async System.Threading.Tasks.Task<System.Collections.Generic.ICollection<ConsumptionDto>> RollbackAsync(System.Guid isv_id, ConsumptionTransactionDto rollbackDto, System.Threading.CancellationToken cancellationToken)
 		{
 			if (isv_id == null)
 				throw new System.ArgumentNullException("isv_id");
@@ -9843,6 +9843,9 @@ namespace SlasconeClient
 		[System.ComponentModel.DataAnnotations.Required]
 		public System.Guid Limitation_id { get; set; }
 
+		[Newtonsoft.Json.JsonProperty("user_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+		public string User_id { get; set; }
+
 		[Newtonsoft.Json.JsonProperty("timestamp_utc", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
 		public System.DateTimeOffset? Timestamp_utc { get; set; }
 
@@ -9867,11 +9870,24 @@ namespace SlasconeClient
 
 		FirstDayOfYear = 5,
 
+		NeverUniqueTokenAssignment = 6,
+
 	}
 
 	[System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.17.0.0 (NJsonSchema v10.8.0.0 (Newtonsoft.Json v13.0.0.0))")]
 	public partial class ConsumptionRollbackResponseErrors : BaseErrorResponse
 	{
+
+	}
+
+	[System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.17.0.0 (NJsonSchema v10.8.0.0 (Newtonsoft.Json v13.0.0.0))")]
+	public partial class ConsumptionTransactionDto
+	{
+		[Newtonsoft.Json.JsonProperty("limitation_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+		public System.Guid Limitation_id { get; set; }
+
+		[Newtonsoft.Json.JsonProperty("transaction_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+		public System.Guid Transaction_id { get; set; }
 
 	}
 
@@ -11081,6 +11097,9 @@ namespace SlasconeClient
 		[Newtonsoft.Json.JsonProperty("consumption_reset_period_days", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
 		public int? Consumption_reset_period_days { get; set; }
 
+		[Newtonsoft.Json.JsonProperty("current_user_transaction_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+		public System.Guid? Current_user_transaction_id { get; set; }
+
 	}
 
 	[System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.17.0.0 (NJsonSchema v10.8.0.0 (Newtonsoft.Json v13.0.0.0))")]
@@ -11459,20 +11478,6 @@ namespace SlasconeClient
 
 		[Newtonsoft.Json.JsonProperty("name", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
 		public string Name { get; set; }
-
-	}
-
-	[System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.17.0.0 (NJsonSchema v10.8.0.0 (Newtonsoft.Json v13.0.0.0))")]
-	public partial class RollbackDto
-	{
-		[Newtonsoft.Json.JsonProperty("client_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-		public string Client_id { get; set; }
-
-		[Newtonsoft.Json.JsonProperty("limitation_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-		public System.Guid Limitation_id { get; set; }
-
-		[Newtonsoft.Json.JsonProperty("transaction_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-		public System.Guid Transaction_id { get; set; }
 
 	}
 
@@ -11862,9 +11867,9 @@ namespace SlasconeClient
 	[System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "13.17.0.0 (NJsonSchema v10.8.0.0 (Newtonsoft.Json v13.0.0.0))")]
 	public partial class ValidateConsumptionStatusDto
 	{
-		[Newtonsoft.Json.JsonProperty("client_id", Required = Newtonsoft.Json.Required.Always)]
+		[Newtonsoft.Json.JsonProperty("license_id", Required = Newtonsoft.Json.Required.Always)]
 		[System.ComponentModel.DataAnnotations.Required]
-		public string Client_id { get; set; }
+		public System.Guid License_id { get; set; }
 
 		[Newtonsoft.Json.JsonProperty("limitation_id", Required = Newtonsoft.Json.Required.Always)]
 		[System.ComponentModel.DataAnnotations.Required]
