@@ -1,4 +1,4 @@
-# Code examples for client activation and provisioning with a floating license.
+# LICENSING & ANALYTICS FOR SOFTWARE AND IoT VENDORS
 
 Instead of using the official [SLASCONE NuGet package](https://www.nuget.org/profiles/SLASCONE), this example consumes the SLASCONE API directly. 
 
@@ -9,6 +9,7 @@ In most cases, it is strongly recommended to use the NuGet package as demonstrat
 
 ## Floating
 
+Regardless of the usage of the NuGet package or not, this examples focuses on floating license scenarios.
 You can read more about our floating license functionality [here.](https://support.slascone.com/hc/en-us/articles/360016152858-FLOATING-DEVICE-LICENSES)
 
 ## Client ID
