@@ -1,12 +1,19 @@
-# SLASCONE-demo-csharp-device-floating
+# Code examples for client activation and provisioning with a floating license.
 
-## C# code example for provisioning/activating of a client device with a floating license.
+Instead of using the official [SLASCONE NuGet package](https://www.nuget.org/profiles/SLASCONE), this example consumes the SLASCONE API directly. 
 
-See the article on the Slascone Documentation site: [Floating device licenses](https://support.slascone.com/hc/en-us/articles/360016152858-FLOATING-DEVICE-LICENSES)
+In most cases, it is strongly recommended to use the NuGet package as demonstrated in the following GitHub repositories:
 
-## Device ID
+- [SLASCONE Demo (console application)](https://github.com/SLASCONE/SLASCONE-demo-csharp-nuget)
+- [SLASCONE Demo (desktop/wpf application)](https://github.com/SLASCONE/SLASCONE-demo-wpf-nuget)
 
-For a device license a unique device id is needed. In this example the unique identifier of the Windows system is used.
+## Floating
+
+You can read more about our floating license functionality [here.](https://support.slascone.com/hc/en-us/articles/360016152858-FLOATING-DEVICE-LICENSES)
+
+## Client ID
+
+In this example the unique identifier of the Windows system is used as a unique client id.
 
 ```
 public static string GetWindowsUniqueDeviceId()
@@ -23,19 +30,19 @@ public static string GetWindowsUniqueDeviceId()
 
 You can find more infos about unique device id's in the article "[Generating a unique client id](https://support.slascone.com/hc/en-us/articles/360016157958-GENERATING-A-UNIQUE-CLIENT-ID)".
 
-## License check
+## Workflow
 
 The license check is performed according to the following flowchart:
 
 ![License check](./images/licensecheck.png)
 
-1. First step is to try to create a license heartbeat. The heartbeat is created using the unique device id.  
-If a heartbeat is created successfully the license check is already done. The license info and the signature can be stored in 
+The first step is to create a license heartbeat.
+- If the heartbeat succeeds, the license check is already done. The license info and the signature can be stored in 
 local files in case of possible communication problems in the future. (such as no internet connection)
-2. If the generation of the license heartbeat fails, different cases must be distinguished based on the error code.  
-- Error code *2006* means that the device id is unknown to the slascone server. The next step then is to activate the license for the device.
-- Other errors indicate a problem with the license.
-- Problems communicating with the server can be dealt with using a special offline mode.
+- If the license heartbeat fails, different cases must be distinguished based on the error code.  
+  - Error code *2006* means that the device id is unknown to the slascone server. The next step then is to activate the license for the device.
+  -  Other errors indicate a problem with the license.
+  -  Problems communicating with the server can be dealt with using a special offline mode.
 
 ## Session handling
 
